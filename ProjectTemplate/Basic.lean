@@ -24,10 +24,42 @@ def edges : FullTree → Nat
   | .node left right =>
       2 + edges left + edges right
 
-
--- needs a defintion of euler's circuits
-
 -- what is a circuit:
+structure Graph (V : Type) where
+  Adj : V → V → Prop
+  adj_symm : ∀ u v, Adj u v → Adj v u
+
+def IsWalk {V : Type} (G : Graph V) (p : List V) : Prop :=
+  ∀ i : Fin (p.length - 1),
+    G.Adj (p.get ⟨i.val, by omega⟩)
+           (p.get ⟨i.val + 1, by omega⟩)
+
+def IsCircuit {V : Type} (G : Graph V) (p : List V) : Prop :=
+  p.length ≥ 2 ∧
+  p.head? = p.getLast? ∧
+  IsWalk G p
+
+#eval [1,2,3,4].head?
+#eval [1,2,3,4].getLast?
+--p.head? returns the first item in the list, and p.getLast? returns the
+-- last element of the list. This also works for trees, using nodes and leaves
+-- instead of the #'s
+
+-- an example of a single edge that works as a circuit
+
+def singleEdge : Graph Bool where
+  Adj u v := u ≠ v
+  adj_symm := fun _ _ h => Ne.symm h
+
+example : IsCircuit singleEdge [true, false, true] := by
+  unfold IsCircuit
+  and_intros
+  · decide
+  · decide
+  · rintro ⟨i, hi⟩
+    simp at hi
+    interval_cases i <;> simp [singleEdge]
+
 -- needs to be closed (the path starts and closes on the same vtx)
 -- cannot traverse any edge more than once
 -- but you can repeat the same node more than once if needed
