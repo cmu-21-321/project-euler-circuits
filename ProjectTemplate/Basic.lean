@@ -1,43 +1,22 @@
+import Mathlib.Tactic.MinImports
 import Mathlib.Tactic
-
--- needs to start by defining what a tree is
-
-inductive FullTree : Type where
-  | leaf : FullTree
-  | node : FullTree → FullTree → FullTree
-
-def nodes : FullTree → Nat
-  | .leaf => 1
-  | .node left right => 1 + nodes left + nodes right
-
-def leaves : FullTree → Nat
-  | .leaf => 1
-  | .node left right => leaves left + leaves right
-
-def internalNodes : FullTree → Nat
-  | .leaf => 0
-  | .node left right =>
-      1 + internalNodes left + internalNodes right
-
-def edges : FullTree → Nat
-  | .leaf => 0
-  | .node left right =>
-      2 + edges left + edges right
 
 -- what is a circuit:
 structure Graph (V : Type) where
   Adj : V → V → Prop
   adj_symm : ∀ u v, Adj u v → Adj v u
 
-def IsWalk {V : Type} (G : Graph V) (p : List V) : Prop :=
-  ∀ i : Fin (p.length - 1),
-    G.Adj (p.get ⟨i.val, by omega⟩)
-           (p.get ⟨i.val + 1, by omega⟩)
+structure Walk {V : Type} (G : Graph V) where
+  support : List V
+  adj : ∀ (i : Nat) (h : i + 1 < support.length),
+    G.Adj (support[i]'(by omega)) (support[i + 1]'h)
 
-def IsCircuit {V : Type} (G : Graph V) (p : List V) : Prop :=
-  p.length ≥ 2 ∧
-  p.head? = p.getLast? ∧
-  IsWalk G p
+def Walk.length {V : Type} {G : Graph V} (w : Walk G) : Nat :=
+  w.support.length - 1
+
+def IsCircuit {V : Type} {G : Graph V} (w : Walk G) : Prop :=
+  w.support.length ≥ 2 ∧
+  w.support.head? = w.support.getLast?
 
 #eval [1,2,3,4].head?
 #eval [1,2,3,4].getLast?
@@ -51,21 +30,26 @@ def singleEdge : Graph Bool where
   Adj u v := u ≠ v
   adj_symm := fun _ _ h => Ne.symm h
 
-example : IsCircuit singleEdge [true, false, true] := by
-  unfold IsCircuit
-  and_intros
-  · decide
-  · decide
-  · rintro ⟨i, hi⟩
-    simp at hi
-    interval_cases i <;> simp [singleEdge]
+def singleEdgeWalk : Walk singleEdge where
+  support := [true, false, true]
+  adj := by
+    intro i h
+    have : i = 0 ∨ i = 1 := by
+      simp at h
+      omega
+    rcases this with rfl | rfl <;> simp [singleEdge]
 
--- needs to be closed (the path starts and closes on the same vtx)
 -- cannot traverse any edge more than once
 -- but you can repeat the same node more than once if needed
 
 -- Euler's circuit
 -- requires that no edge is repeated and that every edge is used once
+def walkEdges {V : Type} (p : List V) : List (Sym2 V) :=
+  (p.zip p.tail).map (fun ab => s(ab.1, ab.2))
+
+def IsEulerCircuit {V : Type} [DecidableEq V] {G : Graph V} (w : Walk G) : Prop :=
+  IsCircuit w ∧
+  ∀ u v, G.Adj u v → (walkEdges w.support).count s(u, v) = 1
 
 -- proof that it has to be an even # of edges to make a circuit
 --Math proof
@@ -77,3 +61,38 @@ example : IsCircuit singleEdge [true, false, true] := by
 -- at the end, the last edge that is used should be the edge used to go in
 -- to the starting vtx,
 -- hence it must be an even # of edges to make a circuit
+
+-- example of eulers circuit
+-- we use a triangle, by starting at an node, we go to one point,
+-- from that point, we go to the other point, which uses the 2 edges of the
+-- center node, the one used 2nd,
+-- and then from the third node, we use the last remaining edge to go back
+-- to the first node, showing that each node had only an even # of edges
+
+def triangle : Graph (Fin 3) where
+  Adj u v := u ≠ v
+  adj_symm := fun _ _ h => Ne.symm h
+
+def triangleWalk : Walk triangle where
+  support := [0, 1, 2, 0]
+  adj := by
+    intro i h
+    have : i = 0 ∨ i = 1 ∨ i = 2 := by
+      simp at h
+      omega
+    rcases this with rfl | rfl | rfl <;> simp [triangle]
+
+example : triangleWalk.length = 3 := by decide
+
+example : IsEulerCircuit triangleWalk := by
+  unfold IsEulerCircuit
+  constructor
+  · -- it is a circuit
+    unfold IsCircuit
+    and_intros
+    · decide
+    · decide
+  · -- every edge is used exactly once
+    intro u v h
+    fin_cases u <;> fin_cases v <;>
+      simp_all [triangle, triangleWalk, walkEdges]
