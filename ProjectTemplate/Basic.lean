@@ -96,3 +96,38 @@ example : IsEulerCircuit triangleWalk := by
     intro u v h
     fin_cases u <;> fin_cases v <;>
       simp_all [triangle, triangleWalk, walkEdges]
+
+
+-- next, hamiltonian cycles
+-- unlike a Euler's circuit, which uses every edge once, a hamiltonian cycle
+-- will hit every edge and vertex wihtout repeating any vertex.
+-- the proof is that for a graph with of n vtx atleast 3 vtxs
+-- if every vtx has atleast n/2 then it will have a hamiltonian cycle
+-- the proof is usually a proof by contradiction
+-- where assuming Ore's Thereom is false, which is that deg(u) +deg(v) ≥ n
+-- for every pair of distinct non adj, vtx.
+
+structure IsHamiltonianCycle (adj : Nat → Nat → Prop) (a b c : Nat) : Prop where
+  a_is_vertex : a = 0 ∨ a = 1 ∨ a = 2
+  b_is_vertex : b = 0 ∨ b = 1 ∨ b = 2
+  c_is_vertex : c = 0 ∨ c = 1 ∨ c = 2
+  a_ne_b : a ≠ b
+  a_ne_c : a ≠ c
+  b_ne_c : b ≠ c
+  edge_ab : adj a b
+  edge_bc : adj b c
+  edge_ca : adj c a
+
+
+/-- The triangle graph has a Hamiltonian cycle visiting `0`, `1`, and `2`. -/
+theorem triangle_has_hamiltonian_cycle :
+    IsHamiltonianCycle (fun x y => x ≠ y) 0 1 2 := by
+  constructor <;> decide
+
+
+-- the difference here between the hamiltonian triangle and the eulers circuit triangle
+-- is that the hamiltonian cycle tree shows that the 3 vtxs are distinct, and that
+-- consecutive vtxs are connected, while the eulers proof focuses on
+-- ensuring that every edge is used only once
+
+#min_import
