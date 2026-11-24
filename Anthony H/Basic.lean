@@ -5,23 +5,7 @@ import Mathlib.Combinatorics.SimpleGraph.Hamiltonian
 
 
 -- what is a circuit:
-structure Graph (V : Type) where
-  Adj : V → V → Prop
-  adj_symm : ∀ u v, Adj u v → Adj v u
-
--- This structure Graph is used because Mathlib's SimpleGraph does not include the
--- adj_symm part which I use in the single edges, the triangle case,
--- and the diagonal square
-
-structure Walk {V : Type} (G : Graph V) where
-  support : List V
-  adj : ∀ (i : Nat) (h : i + 1 < support.length),
-    G.Adj (support[i]'(by omega)) (support[i + 1]'h)
-
--- the structure Walk is defined here because the SimpleGraph.Walk structure
--- of mathlib has a type SimpleGraph, while the Walk's here have type Graph V
-
-def IsCircuit {V : Type} {G : Graph V} (w : Walk G) : Prop :=
+def IsCircuit {V : Type} {G : SimpleGraph V} {u v : V} (w : G.Walk u v) : Prop :=
   w.support.length ≥ 2 ∧
   w.support.head? = w.support.getLast?
 
@@ -32,19 +16,17 @@ def IsCircuit {V : Type} {G : Graph V} (w : Walk G) : Prop :=
 -- instead of the #'s
 
 -- an example of a single edge that works as a circuit
+def singleEdge : SimpleGraph Bool := ⊤
 
-def singleEdge : Graph Bool where
-  Adj u v := u ≠ v
-  adj_symm := fun _ _ h => Ne.symm h
+-- old code, use to write the differences
+---def singleEdge : Graph Bool where
+--- Adj u v := u ≠ v
+--- adj_symm := fun _ _ h => Ne.symm h
 
-def singleEdgeWalk : Walk singleEdge where
-  support := [true, false, true]
-  adj := by
-    intro i h
-    have : i = 0 ∨ i = 1 := by
-      simp at h
-      omega
-    rcases this with rfl | rfl <;> simp [singleEdge]
+def singleEdgeWalk : singleEdge.Walk true true :=
+  have h1 : singleEdge.Adj true false := by simp [singleEdge]
+  have h2 : singleEdge.Adj false true := by simp [singleEdge]
+  .cons h1 (.cons h2 .nil)
 
 -- cannot traverse any edge more than once
 -- but you can repeat the same node more than once if needed
@@ -54,7 +36,10 @@ def singleEdgeWalk : Walk singleEdge where
 def walkEdges {V : Type} (p : List V) : List (Sym2 V) :=
   (p.zip p.tail).map (fun ab => s(ab.1, ab.2))
 
-structure EulerCircuit {V : Type} [DecidableEq V] {G : Graph V} extends Walk G where
+structure EulerCircuit {V : Type} [DecidableEq V] (G : SimpleGraph V) where
+  start : V
+  target : V
+  toWalk : G.Walk start target
   isCircuit : IsCircuit toWalk
   eachEdgeOnce : ∀ u v, G.Adj u v →
     (walkEdges toWalk.support).count s(u, v) = 1
@@ -77,32 +62,37 @@ structure EulerCircuit {V : Type} [DecidableEq V] {G : Graph V} extends Walk G w
 -- and then from the third node, we use the last remaining edge to go back
 -- to the first node, showing that each node had only an even # of edges
 
+def triangle : SimpleGraph (Fin 3) := ⊤
 
-def triangle : Graph (Fin 3) where
-  Adj u v := u ≠ v
-  adj_symm := fun _ _ h => Ne.symm h
+--def triangle : Graph (Fin 3) where
+-- Adj u v := u ≠ v
+-- adj_symm := fun _ _ h => Ne.symm h
 
-def triangleWalk : Walk triangle where
-  support := [0, 1, 2, 0]
-  adj := by
-    intro i h
-    have : i = 0 ∨ i = 1 ∨ i = 2 := by
-      simp at h
-      omega
-    rcases this with rfl | rfl | rfl <;> simp [triangle]
+def triangleWalk : triangle.Walk 0 0 :=
+  have h01 : triangle.Adj 0 1 := by simp [triangle]
+  have h12 : triangle.Adj 1 2 := by simp [triangle]
+  have h20 : triangle.Adj 2 0 := by simp [triangle]
+  .cons h01 (.cons h12 (.cons h20 .nil))
 
-def triangleEuler : EulerCircuit (G := triangle) where
+theorem triangleWalk_support : triangleWalk.support = [0, 1, 2, 0] := rfl
+
+def triangleEuler : EulerCircuit triangle where
+  start := 0
+  target := 0
   toWalk := triangleWalk
   isCircuit := by
     unfold IsCircuit
-    and_intros
-    · decide
-    · decide
+    rw [triangleWalk_support]
+    decide
   eachEdgeOnce := by
     intro u v h
-    fin_cases u <;> fin_cases v <;>
-      simp_all [triangle, triangleWalk, walkEdges]
-
+    -- the following will prove that every edge is used once
+    -- or in other words all pairs of distinct vertices are used exactly once
+    have key : ∀ a b : Fin 3, a ≠ b →
+        (walkEdges [0, 1, 2, 0]).count s(a, b) = 1 := by
+      decide
+    rw [triangleWalk_support]
+    exact key u v (by simpa [triangle] using h)
 
 -- next, hamiltonian cycles
 -- unlike a Euler's circuit, which uses every edge once, a hamiltonian cycle
@@ -113,8 +103,8 @@ def triangleEuler : EulerCircuit (G := triangle) where
 -- where assuming Ore's Thereom is false, which is that deg(u) +deg(v) ≥ n
 -- for every pair of distinct non adj, vtx.
 
-def IsHamiltonianWalk {V : Type} [DecidableEq V] {G : Graph V}
-    (vertices : List V) (w : Walk G) : Prop :=
+def IsHamiltonianWalk {V : Type} [DecidableEq V] {G : SimpleGraph V} {u v : V}
+    (vertices : List V) (w : G.Walk u v) : Prop :=
   IsCircuit w ∧ w.support.dropLast.Nodup ∧ w.support.dropLast.Perm vertices
 
 
@@ -144,7 +134,6 @@ def triangle_has_hamiltonian_cycle :
     edge_to_next := by decide
   }
 
-
 -- the difference here between the hamiltonian triangle and the eulers circuit triangle
 -- is that the hamiltonian cycle tree shows that the 3 vtxs are distinct, and that
 -- consecutive vtxs are connected, while the eulers proof focuses on
@@ -153,33 +142,37 @@ def triangle_has_hamiltonian_cycle :
 --The square's perimeter visits every vertex once, but the graph also has a
 --diagonal edge which the perimeter walk does not traverse. -/
 
-def squareEdges : List (Fin 4 × Fin 4) :=
-  [(0, 1), (1, 2), (2, 3), (0, 3), (0, 2)]
+def squareWithDiagonal : SimpleGraph (Fin 4) :=
+  SimpleGraph.fromEdgeSet {s(0, 1), s(1, 2), s(2, 3), s(3, 0), s(0, 2), s(1,3)}
 
-def squareAdj (u v : Fin 4) : Prop :=
-  (u, v) ∈ squareEdges ∨ (v, u) ∈ squareEdges
+-- the following 4 theroems are just there to
+theorem sq_adj01 : squareWithDiagonal.Adj 0 1 := by
+  simp [squareWithDiagonal, SimpleGraph.fromEdgeSet_adj]
+theorem sq_adj12 : squareWithDiagonal.Adj 1 2 := by
+  simp [squareWithDiagonal, SimpleGraph.fromEdgeSet_adj]
+theorem sq_adj23 : squareWithDiagonal.Adj 2 3 := by
+  simp [squareWithDiagonal, SimpleGraph.fromEdgeSet_adj]
+theorem sq_adj30 : squareWithDiagonal.Adj 3 0 := by
+  simp [squareWithDiagonal, SimpleGraph.fromEdgeSet_adj]
+theorem sq_adj02 : squareWithDiagonal.Adj 0 2 := by
+  simp [squareWithDiagonal, SimpleGraph.fromEdgeSet_adj]
+theorem sq_adj13 : squareWithDiagonal.Adj 1 3 := by
+  simp [squareWithDiagonal, SimpleGraph.fromEdgeSet_adj]
 
-def squareWithDiagonal : Graph (Fin 4) where
-  Adj := squareAdj
-  adj_symm := by
-    intro u v h
-    exact Or.symm h
+def squarePerimeter : squareWithDiagonal.Walk 0 0 :=
+  .cons sq_adj01 (.cons sq_adj12 (.cons sq_adj23 (.cons sq_adj30 .nil)))
 
-def squarePerimeter : Walk squareWithDiagonal where
-  support := [0, 1, 2, 3, 0]
-  adj := by
-    intro i h
-    have hi : i < 4 := by simp at h; omega
-    interval_cases i <;> simp [squareWithDiagonal, squareAdj, squareEdges]
+theorem squarePerimeter_support : squarePerimeter.support = [0, 1, 2, 3, 0] := rfl
 
 theorem square_perimeter_is_hamiltonian :
     IsHamiltonianWalk [0, 1, 2, 3] squarePerimeter := by
   simp [IsHamiltonianWalk, IsCircuit, squarePerimeter]
 
 theorem square_perimeter_is_not_euler :
-    ¬ ∃ c : EulerCircuit (G := squareWithDiagonal), c.toWalk = squarePerimeter := by
-  rintro ⟨c, hc⟩
-  have hdiag := c.eachEdgeOnce 0 2
-    (by simp [squareWithDiagonal, squareAdj, squareEdges])
-  rw [hc] at hdiag
-  simp [squarePerimeter, walkEdges] at hdiag
+    ∀ c : EulerCircuit squareWithDiagonal,
+      c.toWalk.support ≠ squarePerimeter.support := by
+  intro c hc
+  have hdiag := c.eachEdgeOnce 0 2 sq_adj02
+  rw [hc, squarePerimeter_support] at hdiag
+  simp [walkEdges] at hdiag
+-- using s(1,3) would have also given a the same result
